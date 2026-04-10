@@ -1,17 +1,97 @@
-# reporter.py  (the CLI output)
+# reporter.py
+import csv
+def get_recommendation(pkg: dict) -> str:
+    if pkg["score"] >= 80:
+        return "Critical risk: Update immediately or replace this package."
+
+    if pkg["score"] >= 50:
+        return "High risk: Upgrade to a secure version as soon as possible."
+
+    if pkg.get("is_outdated"):
+        return "Consider updating to stay secure."
+
+    if pkg.get("cves"):
+        return "Monitor vulnerabilities and apply patches if needed."
+
+    return "Package is up-to-date and low risk."
 
 def print_report(packages: list[dict]):
     RED, YELLOW, GREEN, RESET = "\033[91m", "\033[93m", "\033[92m", "\033[0m"
+
+    print("\n" + "="*70)
+    print("           DEPENDENCY SECURITY ANALYSIS REPORT")
+    print("="*70)
     
-    print(f"\n{'='*60}")
-    print(f"  DEPENDENCY SECURITY REPORT")
-    print(f"{'='*60}\n")
-    
+    print(f"\n{'Package':<12} {'Version':<10} {'Latest':<10} {'Status':<10} {'CVEs':<5} {'Risk'}")
+    print("-"*70)
+
+    for pkg in packages:
+        color = RED if pkg["score"] >= 70 else YELLOW if pkg["score"] >= 30 else GREEN
+        status = "OUTDATED" if pkg.get("is_outdated") else "OK"
+
+        version = pkg.get("current_version") or "N/A"
+        latest = pkg.get("latest_version") or "N/A"
+        cve_count = len(pkg.get("cves", []))
+
+        print(f"{pkg['name']:<12} {version:<10} {latest:<10} {status:<10} {cve_count:<5} {color}{pkg['score']}{RESET}")
+
+    print("\n" + "="*70)
+    print("DETAILS")
+    print("="*70)
+
     for pkg in sorted(packages, key=lambda x: x["score"], reverse=True):
         color = RED if pkg["score"] >= 70 else YELLOW if pkg["score"] >= 30 else GREEN
-        status = "OUTDATED" if pkg.get("is_outdated") else "current"
-        print(f"{color}[{pkg['score']:>3.0f}] {pkg['name']} {pkg['current_version']} ({status}){RESET}")
-        for cve in pkg.get("cves", []):
-            print(f"      ⚠ {cve['id']} [{cve['severity']}] {cve['summary'][:60]}")
+
+        version = pkg.get("current_version") or "N/A"
+        latest = pkg.get("latest_version") or "N/A"
+
+        print(f"\n{color}{pkg['name'].upper()} (Score: {pkg['score']}){RESET}")
+        print("-"*60)
+        print(f"Version: {version} → {latest}")
+        print(f"Status: {'OUTDATED' if pkg.get('is_outdated') else 'Current'}")
+        print(f"Total CVEs: {len(pkg.get('cves', []))}")
+
+        print("\n Top 5 Vulnerabilities:")
+        for cve in pkg.get("cves", [])[:5]:
+            print(f"  • {cve['id']} {cve['summary'][:60]}")
+
+        unknowns = [c for c in pkg.get("cves", []) if c["severity"] == "UNKNOWN"]
+        if unknowns:
+            print(f"\n⚠ {len(unknowns)} vulnerabilities have UNKNOWN severity")
+
+        recommendation = get_recommendation(pkg)
+        print(f"\nRecommendation:\n{recommendation}")
+        
+    print("\n" + "="*70)
+
+    total = len(packages)
+    outdated = sum(1 for p in packages if p.get("is_outdated"))
+    high_risk = sum(1 for p in packages if p["score"] >= 70)
+
+    print("\nSUMMARY")
+    print(f"Total packages: {total}")
+    print(f"Outdated packages: {outdated}")
+    print(f"High-risk packages: {high_risk}")
+
+    print("="*70 + "\n")
     
-    print(f"\n{'='*60}\n")
+
+def export_csv(packages: list[dict], filename="report.csv"):
+    with open(filename, "w", newline="") as f:
+        writer = csv.writer(f)
+
+        writer.writerow([
+            "Package", "Current Version", "Latest Version",
+            "Outdated", "CVE Count", "Risk Score", "Recommendation"
+        ])
+
+        for pkg in packages:
+            writer.writerow([
+                pkg["name"],
+                pkg.get("current_version") or "N/A",
+                pkg.get("latest_version") or "N/A",
+                pkg.get("is_outdated", False),
+                len(pkg.get("cves", [])),
+                pkg.get("score", 0),
+                get_recommendation(pkg)
+            ])
