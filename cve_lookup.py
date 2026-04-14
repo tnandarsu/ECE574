@@ -30,14 +30,28 @@ def query_osv(package_name: str, version: str) -> list[dict]:
 
                 severity = classify_cvss(cvss_score)
 
+        aliases = v.get("aliases", [])
+
+        cve_id = None
+        ghsa_id = None
+
+        for a in aliases:
+            if a.startswith("CVE-"):
+                cve_id = a
+            elif a.startswith("GHSA-"):
+                ghsa_id = a
+
         vulns.append({
             "id": v.get("id", "N/A"),
+            "cve_id": cve_id,
+            "ghsa_id": ghsa_id or v.get("id"),
             "summary": v.get("summary", "No summary"),
             "severity": severity,
             "cvss_score": cvss_score
         })
 
     return vulns
+
 
 def classify_cvss(score: float) -> str:
     if score >= 9.0: return "CRITICAL"
